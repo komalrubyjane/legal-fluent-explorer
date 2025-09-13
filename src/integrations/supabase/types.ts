@@ -14,7 +14,92 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      document_analyses: {
+        Row: {
+          beneficial_clauses: string[] | null
+          complexity_score: number | null
+          created_at: string
+          critical_clauses: string[] | null
+          document_id: string
+          id: string
+          key_points: string[] | null
+          risk_score: number | null
+          simplified_content: string
+          summary: string | null
+        }
+        Insert: {
+          beneficial_clauses?: string[] | null
+          complexity_score?: number | null
+          created_at?: string
+          critical_clauses?: string[] | null
+          document_id: string
+          id?: string
+          key_points?: string[] | null
+          risk_score?: number | null
+          simplified_content: string
+          summary?: string | null
+        }
+        Update: {
+          beneficial_clauses?: string[] | null
+          complexity_score?: number | null
+          created_at?: string
+          critical_clauses?: string[] | null
+          document_id?: string
+          id?: string
+          key_points?: string[] | null
+          risk_score?: number | null
+          simplified_content?: string
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_analyses_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          analysis_status: string | null
+          content: string
+          created_at: string
+          file_size: number | null
+          file_type: string
+          id: string
+          title: string
+          updated_at: string
+          upload_date: string
+          user_id: string | null
+        }
+        Insert: {
+          analysis_status?: string | null
+          content: string
+          created_at?: string
+          file_size?: number | null
+          file_type: string
+          id?: string
+          title: string
+          updated_at?: string
+          upload_date?: string
+          user_id?: string | null
+        }
+        Update: {
+          analysis_status?: string | null
+          content?: string
+          created_at?: string
+          file_size?: number | null
+          file_type?: string
+          id?: string
+          title?: string
+          updated_at?: string
+          upload_date?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

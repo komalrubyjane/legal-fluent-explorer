@@ -1,1 +1,7 @@
 project_id = "rzorrrhdvqrvyqjhldnc"
+
+[functions.process-document]
+verify_jwt = false
+
+[functions.get-document-analysis]
+verify_jwt = false

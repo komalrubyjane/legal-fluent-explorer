@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { useDocumentUpload } from "@/hooks/useDocumentUpload";
 import { 
   ArrowLeft,
   Upload, 
@@ -24,8 +26,11 @@ interface DocumentSimulatorProps {
 
 export const DocumentSimulator = ({ onBack }: DocumentSimulatorProps) => {
   const [currentStep, setCurrentStep] = useState<'upload' | 'analyze' | 'results'>('upload');
-  const [analysisProgress, setAnalysisProgress] = useState(0);
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
+  const [analysisResults, setAnalysisResults] = useState<any>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  
+  const { processDocument, isProcessing, progress } = useDocumentUpload();
 
   const sampleDocuments = [
     {
@@ -60,21 +65,129 @@ export const DocumentSimulator = ({ onBack }: DocumentSimulatorProps) => {
     comprehensionLevel: 'Intermediate'
   };
 
-  const handleDocumentSelect = (docId: string) => {
+  const handleFileUpload = useCallback(async (file: File) => {
+    if (!file) return;
+    
+    setUploadedFile(file);
+    setCurrentStep('analyze');
+    
+    try {
+      const content = await file.text();
+      const result = await processDocument(
+        content,
+        file.name,
+        file.type,
+        file.size
+      );
+      
+      if (result) {
+        setAnalysisResults(result.analysis);
+        setCurrentStep('results');
+      }
+    } catch (error) {
+      console.error('Error processing file:', error);
+      setCurrentStep('upload');
+    }
+  }, [processDocument]);
+
+  const handleDocumentSelect = async (docId: string) => {
     setSelectedDocument(docId);
     setCurrentStep('analyze');
     
-    // Simulate analysis progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 15;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-        setTimeout(() => setCurrentStep('results'), 500);
+    // Get sample document content
+    const sampleDoc = sampleDocuments.find(doc => doc.id === docId);
+    if (!sampleDoc) return;
+    
+    const sampleContent = getSampleDocumentContent(docId);
+    
+    try {
+      const result = await processDocument(
+        sampleContent,
+        sampleDoc.title,
+        'text/plain',
+        sampleContent.length
+      );
+      
+      if (result) {
+        setAnalysisResults(result.analysis);
+        setCurrentStep('results');
       }
-      setAnalysisProgress(progress);
-    }, 300);
+    } catch (error) {
+      console.error('Error processing sample document:', error);
+      setCurrentStep('upload');
+    }
+  };
+
+  const getSampleDocumentContent = (docId: string): string => {
+    const sampleContents: Record<string, string> = {
+      employment: `EMPLOYMENT AGREEMENT
+
+This Employment Agreement ("Agreement") is entered into on [DATE] between [COMPANY NAME], a corporation ("Company"), and [EMPLOYEE NAME] ("Employee").
+
+1. POSITION AND DUTIES
+Employee agrees to serve as [POSITION] and to perform such duties as may be assigned by the Company.
+
+2. COMPENSATION
+Company agrees to pay Employee a base salary of $[AMOUNT] per year, payable in accordance with Company's standard payroll practices.
+
+3. CONFIDENTIALITY
+Employee acknowledges that during employment, Employee will have access to certain confidential and proprietary information. Employee agrees to maintain such information in strict confidence.
+
+4. INTELLECTUAL PROPERTY
+All inventions, discoveries, developments, and innovations conceived by Employee during employment shall be the exclusive property of the Company.
+
+5. TERMINATION
+This Agreement may be terminated by either party with thirty (30) days written notice.
+
+6. GOVERNING LAW
+This Agreement shall be governed by the laws of [STATE].`,
+      
+      rental: `RESIDENTIAL LEASE AGREEMENT
+
+This Lease Agreement is made between [LANDLORD NAME] ("Landlord") and [TENANT NAME] ("Tenant") for the property located at [ADDRESS].
+
+1. TERM
+The lease term shall commence on [START DATE] and end on [END DATE].
+
+2. RENT
+Tenant agrees to pay monthly rent of $[AMOUNT], due on the first day of each month.
+
+3. SECURITY DEPOSIT
+Tenant shall pay a security deposit of $[AMOUNT] upon signing this lease.
+
+4. PETS
+Pets are permitted with additional deposit of $[AMOUNT] and monthly pet fee of $[AMOUNT].
+
+5. UTILITIES
+Tenant is responsible for electricity, gas, and internet. Landlord pays water and trash.
+
+6. MAINTENANCE
+Tenant shall maintain the premises in good condition and notify Landlord of needed repairs.`,
+      
+      service: `PROFESSIONAL SERVICES AGREEMENT
+
+This Agreement is entered into between [SERVICE PROVIDER] ("Provider") and [CLIENT NAME] ("Client").
+
+1. SERVICES
+Provider agrees to perform the following services: [DESCRIPTION OF SERVICES]
+
+2. COMPENSATION
+Client agrees to pay Provider $[AMOUNT] for the services described herein.
+
+3. TIMELINE
+Services shall be completed by [DEADLINE DATE].
+
+4. LIABILITY
+Provider's liability shall not exceed the total amount paid under this Agreement.
+
+5. INTELLECTUAL PROPERTY
+All work product created shall remain the property of the Client upon full payment.
+
+6. TERMINATION
+Either party may terminate this Agreement with seven (7) days written notice.`
+    };
+    
+    return sampleContents[docId] || '';
   };
 
   if (currentStep === 'upload') {
@@ -115,7 +228,20 @@ export const DocumentSimulator = ({ onBack }: DocumentSimulatorProps) => {
                   <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                   <p className="text-lg font-medium mb-2">Drag and drop your document here</p>
                   <p className="text-muted-foreground mb-4">or click to browse files</p>
-                  <Button className="btn-primary">
+                  <Input
+                    type="file"
+                    accept=".txt,.pdf,.docx"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(file);
+                    }}
+                    className="hidden"
+                    id="file-upload"
+                  />
+                  <Button 
+                    className="btn-primary"
+                    onClick={() => document.getElementById('file-upload')?.click()}
+                  >
                     Choose File
                   </Button>
                 </div>
@@ -182,9 +308,9 @@ export const DocumentSimulator = ({ onBack }: DocumentSimulatorProps) => {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span>Progress</span>
-                <span>{Math.round(analysisProgress)}%</span>
+                <span>{Math.round(progress)}%</span>
               </div>
-              <Progress value={analysisProgress} className="h-2" />
+              <Progress value={progress} className="h-2" />
             </div>
             
             <div className="space-y-2 text-sm text-muted-foreground">
@@ -197,7 +323,7 @@ export const DocumentSimulator = ({ onBack }: DocumentSimulatorProps) => {
                 Text extracted and processed
               </div>
               <div className="flex items-center gap-2">
-                {analysisProgress > 50 ? (
+                {progress > 50 ? (
                   <CheckCircle className="h-4 w-4 text-success" />
                 ) : (
                   <div className="h-4 w-4 border-2 border-muted rounded-full animate-spin" />
@@ -205,7 +331,7 @@ export const DocumentSimulator = ({ onBack }: DocumentSimulatorProps) => {
                 AI analysis in progress
               </div>
               <div className="flex items-center gap-2">
-                {analysisProgress > 80 ? (
+                {progress > 80 ? (
                   <CheckCircle className="h-4 w-4 text-success" />
                 ) : (
                   <div className="h-4 w-4 border-2 border-muted rounded-full" />
@@ -233,7 +359,11 @@ export const DocumentSimulator = ({ onBack }: DocumentSimulatorProps) => {
               </Button>
               <div>
                 <h1 className="text-2xl font-bold">Analysis Results</h1>
-                <p className="text-muted-foreground">Employment Contract Analysis</p>
+                <p className="text-muted-foreground">
+                  {uploadedFile ? uploadedFile.name : selectedDocument ? 
+                    sampleDocuments.find(d => d.id === selectedDocument)?.title : 
+                    'Document Analysis'}
+                </p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -258,14 +388,18 @@ export const DocumentSimulator = ({ onBack }: DocumentSimulatorProps) => {
             <Card className="card-elegant">
               <CardContent className="p-6 text-center">
                 <FileText className="h-8 w-8 mx-auto mb-2 text-primary" />
-                <div className="text-2xl font-bold">{mockAnalysisResults.totalClauses}</div>
-                <div className="text-sm text-muted-foreground">Total Clauses</div>
+                <div className="text-2xl font-bold">
+                  {analysisResults?.key_points?.length || 0}
+                </div>
+                <div className="text-sm text-muted-foreground">Key Points</div>
               </CardContent>
             </Card>
             <Card className="card-elegant">
               <CardContent className="p-6 text-center">
                 <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" />
-                <div className="text-2xl font-bold">{mockAnalysisResults.criticalClauses}</div>
+                <div className="text-2xl font-bold">
+                  {analysisResults?.critical_clauses?.length || 0}
+                </div>
                 <div className="text-sm text-muted-foreground">Critical Issues</div>
               </CardContent>
             </Card>
@@ -274,20 +408,20 @@ export const DocumentSimulator = ({ onBack }: DocumentSimulatorProps) => {
                 <div className="relative h-8 w-8 mx-auto mb-2">
                   <div className="absolute inset-0 rounded-full border-4 border-muted"></div>
                   <div 
-                    className="absolute inset-0 rounded-full border-4 border-warning border-t-transparent animate-spin"
+                    className="absolute inset-0 rounded-full border-4 border-warning border-t-transparent"
                     style={{
-                      transform: `rotate(${(mockAnalysisResults.riskScore / 100) * 360}deg)`
+                      transform: `rotate(${((analysisResults?.risk_score || 0) / 100) * 360}deg)`
                     }}
                   ></div>
                 </div>
-                <div className="text-2xl font-bold">{mockAnalysisResults.riskScore}%</div>
+                <div className="text-2xl font-bold">{analysisResults?.risk_score || 0}%</div>
                 <div className="text-sm text-muted-foreground">Risk Score</div>
               </CardContent>
             </Card>
             <Card className="card-elegant">
               <CardContent className="p-6 text-center">
                 <BookOpen className="h-8 w-8 mx-auto mb-2 text-secondary" />
-                <div className="text-lg font-bold">{mockAnalysisResults.comprehensionLevel}</div>
+                <div className="text-lg font-bold">{analysisResults?.complexity_score || 0}%</div>
                 <div className="text-sm text-muted-foreground">Complexity</div>
               </CardContent>
             </Card>
@@ -307,39 +441,41 @@ export const DocumentSimulator = ({ onBack }: DocumentSimulatorProps) => {
                 <CardHeader>
                   <CardTitle>AI-Generated Summary</CardTitle>
                   <CardDescription>
-                    Key insights from your employment contract
+                    Key insights from your document
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="prose max-w-none">
-                    <p>
-                      This employment contract contains <strong>2 critical clauses</strong> that require your attention, 
-                      particularly around confidentiality and intellectual property rights. The agreement includes 
-                      <strong>fair compensation terms</strong> with overtime protection and standard termination procedures.
-                    </p>
+                    <p>{analysisResults?.summary || 'No summary available'}</p>
                   </div>
                   
                   <div className="grid md:grid-cols-3 gap-4 mt-6">
                     <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
                       <AlertTriangle className="h-6 w-6 mb-2 text-destructive" />
                       <h4 className="font-semibold mb-1">Critical Attention</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Strict confidentiality and IP assignment clauses
-                      </p>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        {analysisResults?.critical_clauses?.map((clause: string, index: number) => (
+                          <p key={index}>{clause}</p>
+                        )) || <p>No critical issues found</p>}
+                      </div>
                     </div>
-                    <div className="p-4 bg-warning/10 border border-warning/20 rounded-lg">
-                      <Info className="h-6 w-6 mb-2 text-warning" />
-                      <h4 className="font-semibold mb-1">Important Details</h4>
-                      <p className="text-sm text-muted-foreground">
-                        30-day notice period and probation terms
-                      </p>
+                    <div className="p-4 bg-info/10 border border-info/20 rounded-lg">
+                      <Info className="h-6 w-6 mb-2 text-info" />
+                      <h4 className="font-semibold mb-1">Key Points</h4>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        {analysisResults?.key_points?.slice(0, 3)?.map((point: string, index: number) => (
+                          <p key={index}>{point}</p>
+                        )) || <p>No key points identified</p>}
+                      </div>
                     </div>
                     <div className="p-4 bg-success/10 border border-success/20 rounded-lg">
                       <CheckCircle className="h-6 w-6 mb-2 text-success" />
                       <h4 className="font-semibold mb-1">Beneficial Terms</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Overtime pay and health benefits included
-                      </p>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        {analysisResults?.beneficial_clauses?.map((clause: string, index: number) => (
+                          <p key={index}>{clause}</p>
+                        )) || <p>No beneficial terms highlighted</p>}
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -349,16 +485,16 @@ export const DocumentSimulator = ({ onBack }: DocumentSimulatorProps) => {
             <TabsContent value="clauses" className="mt-6">
               <Card className="card-elegant">
                 <CardHeader>
-                  <CardTitle>Clause-by-Clause Analysis</CardTitle>
+                  <CardTitle>Simplified Content</CardTitle>
                   <CardDescription>
-                    Detailed breakdown of each contract section
+                    Your document explained in plain English
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-12 text-muted-foreground">
-                    <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg">Detailed clause analysis coming soon</p>
-                    <p>This feature will provide line-by-line explanations</p>
+                  <div className="prose max-w-none">
+                    <div className="whitespace-pre-wrap">
+                      {analysisResults?.simplified_content || 'No simplified content available'}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
